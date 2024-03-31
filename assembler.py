@@ -2,11 +2,12 @@ import argparse
 from data import *
 
 parser = argparse.ArgumentParser(
-                    prog='Hack Assembler',
+                    prog='assembler.py',
                     description='Converts Hack Assembly code to binary.',
-                    epilog='Nothing Here')
+                    epilog='More information on https://github.com/anasahmd/hack-assembler/')
 
-parser.add_argument('file', metavar='file', type=argparse.FileType('r'))
+parser.add_argument('input_file', help='Input Asm File', type=argparse.FileType('r'))
+parser.add_argument('-o', '--output', metavar='output_file', help='Output Destination (Optional)', required=False)
 
 args = parser.parse_args()
 
@@ -122,16 +123,19 @@ def second_pass(file, hack_file):
   
 def main():
   # Create a new Hack file to store the output
-  if ".asm" not in args.file.name:
+  if ".asm" not in args.input_file.name:
     print( "Invalid File")
     exit(1)
+  if args.output != None:
+    hack_file = open(args.output, 'w')
+  else:
+    hack_file_name = args.input_file.name.replace('.asm', '.hack')
+    hack_file = open(hack_file_name, 'w')
 
-  hack_file_name = args.file.name.replace('.asm', '.hack')
-  hack_file = open(hack_file_name, "w")
 
-  first_pass(args.file)
-  args.file.seek(0)
-  second_pass(args.file, hack_file)
+  first_pass(args.input_file)
+  args.input_file.seek(0)
+  second_pass(args.input_file, hack_file)
 
   hack_file.close()
 
