@@ -6,31 +6,40 @@ parser = argparse.ArgumentParser(
                     description='Converts Hack Assembly code to binary.',
                     epilog='Nothing Here')
 
-parser.add_argument('filename', metavar='filename', type=argparse.FileType('r'))
+parser.add_argument('file', metavar='file', type=argparse.FileType('r'))
 
 args = parser.parse_args()
 
-# Create a new Hack file to store the output
-hack_file_name = args.filename.name.replace('asm', 'hack')
-hack_file = open(hack_file_name, "w")
+next_ram_index = 16
+symbol_table = initial_symbol_table
 
-# removes comment from a line
-def remove_comments(line: str) -> str:
+
+# extract only asm code (returns empty string if no valid code is present)
+def extract_asm_code(line: str) -> str:
   comment_index = line.find('//')
+  extracted_code = line
+  # if comment, then remove it
   if not comment_index == -1:
-    remove_comment = line[:comment_index]
-    return remove_comment
-  else:
-    return line
-
-# removes white space from a line
-def remove_whitespace(line: str) -> str:
-  return line.replace(' ', '').replace('\n', '')
+    extracted_code = line[:comment_index]
+  # Return the line after removing white space and line break
+  return extracted_code.replace(' ', '').replace('\n', '')
 
 # Translate A instruction
 def translate_a_instruction(line: str) -> str:
-  decimal_value = int(line[1:])
-  binary = format(decimal_value, '016b')
+  global next_ram_index
+  binary = ''
+  if line[1].isnumeric():
+    decimal_value = int(line[1:])
+    binary = format(decimal_value, '016b')
+  else:
+    symbol = line[1:]
+    if symbol in symbol_table:
+      address = symbol_table[symbol]
+      binary = format(address, '016b')
+    else:
+      symbol_table[symbol] = next_ram_index
+      binary = format(next_ram_index, '016b')
+      next_ram_index += 1
   return binary
 
 # returns dest bit from a c instruction
@@ -40,7 +49,8 @@ def get_dest(line: str) -> str:
     return '000' 
   else:
     dest = line[:eq_index]
-    dest_binary = dest_data[dest]
+    sorted_dest = ''.join(sorted(dest))
+    dest_binary = dest_data[sorted_dest]
     return dest_binary
 
 # returns comp bit from a c instruction
@@ -73,25 +83,60 @@ def translate_c_instruction(line: str) -> str:
 
   return '111' + comp + dest + jump
 
-
-# Remove lines
+# Assume valid asm code is provided
 # String -> Binary
-def translate_line(line: str):
-  removed_comment = remove_comments(line)
-  removed_whitespace = remove_whitespace(removed_comment)
-
-  if removed_whitespace:
-    if removed_whitespace[0] == '@':
-      return translate_a_instruction(removed_whitespace)
-    else:
-      return translate_c_instruction(removed_whitespace)
+def translate_line(asm_code: str):
+  if asm_code[0] == '@':
+    return translate_a_instruction(asm_code)
+  else:
+    return translate_c_instruction(asm_code)
   
+# Assuming there is a label in the line
+def extract_label(line: str) -> str:
+  start_index = line.find('(') + 1;
+  end_index = line.find(')')
+  label = line[start_index:end_index]
+  return label
+  
+# First pass of the assembler to extract labels
+def first_pass(file):
+  current_line = 0
+  for line in file:
+    asm_code = extract_asm_code(line)
+    if asm_code:
+      # Label code is not counted towards line
+      if asm_code[0] == '(':
+        label = extract_label(asm_code)
+        symbol_table[label] = current_line
+      else:
+        current_line += 1
 
-for line in args.filename:
-  translated_line = translate_line(line)
-  if translated_line :
-    hack_file.write(translated_line + '\n')
+# Second pass of the assembler to translate the code
+def second_pass(file, hack_file):
+  for line in file:
+    asm_code = extract_asm_code(line)
+    if asm_code and asm_code[0] != '(':
+      translated_line = translate_line(asm_code)
+      hack_file.write(translated_line + '\n')
 
-hack_file.close()
+  
+def main():
+  # Create a new Hack file to store the output
+  if ".asm" not in args.file.name:
+    print( "Invalid File")
+    exit(1)
+
+  hack_file_name = args.file.name.replace('.asm', '.hack')
+  hack_file = open(hack_file_name, "w")
+
+  first_pass(args.file)
+  args.file.seek(0)
+  second_pass(args.file, hack_file)
+
+  hack_file.close()
+
+if __name__ == '__main__':
+  main()
+
 
 
